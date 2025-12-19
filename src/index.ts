@@ -1,11 +1,20 @@
 #!/usr/bin/env node
 
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import blessed from 'blessed'
 
 import { loadUsageData } from './lib/data-loader.js'
 import type { AnalysisData } from './lib/data-loader.js'
 import { shortenProjectName } from './lib/paths.js'
 import { formatCost, formatNumber, formatPercent, formatTokens, truncate } from './lib/utils.js'
+
+// 读取 package.json 获取版本号
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const pkgPath = path.resolve(__dirname, '../package.json')
+const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { version: string }
+const VERSION = pkg.version
 
 type CliOptions = {
   days: number | null
@@ -471,9 +480,11 @@ async function main(): Promise<void> {
   // 更新状态栏
   function updateStatusBar(): void {
     const daysInfo = options.days ? `Last ${options.days} days` : 'All time'
-    statusBar.setContent(
-      ` ${daysInfo} | Total: ${formatCost(data.grandTotal.cost)} | q quit, Tab switch, r refresh`
-    )
+    const leftContent = ` ${daysInfo} | Total: ${formatCost(data.grandTotal.cost)} | q quit, Tab switch, r refresh`
+    const rightContent = `v${VERSION} `
+    const width = Number(screen.width) || 80
+    const padding = Math.max(0, width - leftContent.length - rightContent.length)
+    statusBar.setContent(leftContent + ' '.repeat(padding) + rightContent)
   }
 
   // 键盘事件
