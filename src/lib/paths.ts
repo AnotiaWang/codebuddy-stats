@@ -41,6 +41,21 @@ export function getIdeDataDir(): string {
 }
 
 /**
+ * 获取 CodeBuddy IDE 的 workspaceStorage 目录
+ */
+export function getWorkspaceStorageDir(): string {
+  if (process.platform === 'darwin') {
+    return path.join(os.homedir(), 'Library', 'Application Support', 'CodeBuddy CN', 'User', 'workspaceStorage')
+  }
+  if (process.platform === 'win32') {
+    const appData = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming')
+    return path.join(appData, 'CodeBuddy CN', 'User', 'workspaceStorage')
+  }
+  const configHome = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config')
+  return path.join(configHome, 'CodeBuddy CN', 'User', 'workspaceStorage')
+}
+
+/**
  * 获取项目数据目录
  */
 export function getProjectsDir(): string {
@@ -52,12 +67,4 @@ export function getProjectsDir(): string {
  */
 export function getSettingsPath(): string {
   return path.join(getConfigDir(), 'settings.json')
-}
-
-/**
- * 简化项目路径显示
- * 保持原始名称不变
- */
-export function shortenProjectName(name: string): string {
-  return name
 }

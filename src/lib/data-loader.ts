@@ -5,6 +5,7 @@ import { createInterface } from 'node:readline'
 
 import { getIdeDataDir, getProjectsDir, getSettingsPath } from './paths.js'
 import { DEFAULT_MODEL_ID, getPricingForModel, tokensToCost } from './pricing.js'
+import { loadWorkspaceMappings, type WorkspaceMapping } from './workspace-resolver.js'
 
 export const BASE_DIR = getProjectsDir()
 
@@ -55,6 +56,8 @@ export interface AnalysisData {
   topProject: (SummaryStats & { name: string }) | null
   cacheHitRate: number
   activeDays: number
+  /** 工作区 hash -> 路径映射（仅 IDE source 有效） */
+  workspaceMappings?: Map<string, import('./workspace-resolver.js').WorkspaceMapping>
 }
 
 export type UsageSource = 'code' | 'ide'
@@ -199,7 +202,8 @@ function finalizeAnalysis(
   dailyData: DailyData,
   modelTotals: Record<string, SummaryStats>,
   projectTotals: Record<string, SummaryStats>,
-  grandTotal: GrandTotal
+  grandTotal: GrandTotal,
+  workspaceMappings?: Map<string, WorkspaceMapping>
 ): AnalysisData {
   const dailySummary: Record<string, SummaryStats> = {}
   for (const date of Object.keys(dailyData)) {
@@ -232,6 +236,7 @@ function finalizeAnalysis(
     topProject: topProjectEntry ? { name: topProjectEntry[0], ...topProjectEntry[1] } : null,
     cacheHitRate,
     activeDays: Object.keys(dailyData).length,
+    workspaceMappings,
   }
 }
 
@@ -459,6 +464,9 @@ async function loadIdeUsageData(options: LoadUsageOptions = {}): Promise<Analysi
   const defaultModelId = await loadModelFromSettings()
   const minDate = computeMinDate(options.days)
 
+  // 加载工作区映射
+  const workspaceMappings = await loadWorkspaceMappings()
+
   const dailyData: DailyData = {}
   const modelTotals: Record<string, SummaryStats> = {}
   const projectTotals: Record<string, SummaryStats> = {}
@@ -569,5 +577,5 @@ async function loadIdeUsageData(options: LoadUsageOptions = {}): Promise<Analysi
     }
   }
 
-  return finalizeAnalysis(defaultModelId, dailyData, modelTotals, projectTotals, grandTotal)
+  return finalizeAnalysis(defaultModelId, dailyData, modelTotals, projectTotals, grandTotal, workspaceMappings)
 }

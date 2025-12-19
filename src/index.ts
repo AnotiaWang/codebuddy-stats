@@ -7,7 +7,7 @@ import blessed from 'blessed'
 
 import { loadUsageData } from './lib/data-loader.js'
 import type { AnalysisData } from './lib/data-loader.js'
-import { shortenProjectName } from './lib/paths.js'
+import { resolveProjectName } from './lib/workspace-resolver.js'
 import { formatCost, formatNumber, formatPercent, formatTokens, truncate } from './lib/utils.js'
 
 // 读取 package.json 获取版本号
@@ -168,7 +168,7 @@ function renderOverview(box: any, data: AnalysisData, width: number, note: strin
   }
   if (topProject) {
     const projectMaxLen = width >= 100 ? 60 : 35
-    const shortName = shortenProjectName(topProject.name)
+    const shortName = resolveProjectName(topProject.name, data.workspaceMappings)
     content += `{cyan-fg}Top project:{/cyan-fg}      ${truncate(shortName, projectMaxLen)} (${formatCost(topProject.cost)})\n`
   }
 
@@ -249,7 +249,7 @@ function renderByProject(box: any, data: AnalysisData, width: number, note: stri
 
   for (const [projectName, stats] of sorted) {
     // 简化项目名
-    const shortName = shortenProjectName(projectName)
+    const shortName = resolveProjectName(projectName, data.workspaceMappings)
     content +=
       truncate(shortName, projectCol - 1).padEnd(projectCol) +
       formatCost(stats.cost).padStart(12) +
@@ -324,7 +324,7 @@ function renderDaily(box: any, data: AnalysisData, scrollOffset = 0, width: numb
       }
     }
 
-    const shortProject = shortenProjectName(topProject.name)
+    const shortProject = resolveProjectName(topProject.name, data.workspaceMappings)
 
     content +=
       date.padEnd(dateCol) +
@@ -378,7 +378,7 @@ function printTextReport(data: AnalysisData): void {
   for (const [project, stats] of Object.entries(projectTotals)
     .sort((a, b) => b[1].cost - a[1].cost)
     .slice(0, 10)) {
-    const shortName = shortenProjectName(project)
+    const shortName = resolveProjectName(project, data.workspaceMappings)
     console.log(`  ${truncate(shortName, 40)}: ${formatCost(stats.cost)}`) // eslint-disable-line no-console
   }
 
