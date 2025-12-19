@@ -67,6 +67,10 @@ cbs --help
 
 按项目分类的费用统计，方便了解不同项目的 AI 使用成本。
 
+工具会自动将项目标识解析为可读路径：
+- **Code 模式**: 将 `Users-anoti-Documents-project-xxx` 还原为 `~/Documents/project/xxx`
+- **IDE 模式**: 将 MD5 hash 映射为实际工作区路径
+
 ### Daily
 
 每日使用明细，显示日期、费用、请求数以及当天使用最多的模型和项目。

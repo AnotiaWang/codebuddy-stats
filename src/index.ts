@@ -363,7 +363,8 @@ function printTextReport(data: AnalysisData): void {
     console.log(`\nTop model:         ${topModel.id} (${formatCost(topModel.cost)})`)
   }
   if (topProject) {
-    console.log(`Top project:       ${topProject.name}`)
+    const shortName = resolveProjectName(topProject.name, data.workspaceMappings)
+    console.log(`Top project:       ${shortName}`)
     console.log(`                   (${formatCost(topProject.cost)})`)
   }
 

@@ -12,6 +12,9 @@ export interface WorkspaceMapping {
   displayPath: string
 }
 
+// 缓存已解析的 CodeBuddy Code 路径名
+const codePathCache = new Map<string, string>()
+
 /**
  * 从 folder URI 提取纯路径（用于计算 MD5）
  */
@@ -43,6 +46,17 @@ function extractPathFromUri(folderUri: string): string | null {
 }
 
 /**
+ * 格式化路径用于显示（简化 home 目录）
+ */
+function formatDisplayPath(p: string): string {
+  const home = os.homedir()
+  if (p.startsWith(home)) {
+    return '~' + p.slice(home.length)
+  }
+  return p
+}
+
+/**
  * 从 folder URI 生成用于显示的友好路径
  */
 function getDisplayPath(folderUri: string): string {
@@ -50,11 +64,7 @@ function getDisplayPath(folderUri: string): string {
   if (folderUri.startsWith('file://')) {
     const p = extractPathFromUri(folderUri)
     if (p) {
-      const home = os.homedir()
-      if (p.startsWith(home)) {
-        return '~' + p.slice(home.length)
-      }
-      return p
+      return formatDisplayPath(p)
     }
   }
 
@@ -130,14 +140,96 @@ export async function loadWorkspaceMappings(): Promise<Map<string, WorkspaceMapp
 }
 
 /**
- * 解析项目名称，如果是 MD5 hash 则尝试从映射中获取可读路径
+ * 检查路径是否存在（同步版本，用于路径探测）
+ */
+function pathExistsSync(p: string): boolean {
+  try {
+    fsSync.accessSync(p)
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 尝试将 CodeBuddy Code 的项目名（路径中 / 替换为 -）还原为真实路径
+ * 使用回溯搜索，因为目录名本身可能包含 -
+ *
+ * 例如: "Users-anoti-Documents-project-codebudy-cost-analyzer"
+ *    -> "/Users/anoti/Documents/project/codebudy-cost-analyzer"
+ */
+function tryResolveCodePath(name: string): string | null {
+  // 检查缓存
+  const cached = codePathCache.get(name)
+  if (cached !== undefined) {
+    return cached || null
+  }
+
+  const parts = name.split('-')
+  if (parts.length < 2) {
+    codePathCache.set(name, '')
+    return null
+  }
+
+  // 回溯搜索：尝试不同的分割方式
+  function backtrack(index: number, currentPath: string): string | null {
+    if (index >= parts.length) {
+      // 检查完整路径是否存在
+      if (pathExistsSync(currentPath)) {
+        return currentPath
+      }
+      return null
+    }
+
+    // 尝试从当前位置开始，合并不同数量的 parts
+    for (let end = index; end < parts.length; end++) {
+      const segment = parts.slice(index, end + 1).join('-')
+      const newPath = currentPath ? `${currentPath}/${segment}` : `/${segment}`
+
+      // 如果这不是最后一段，检查目录是否存在
+      if (end < parts.length - 1) {
+        if (pathExistsSync(newPath)) {
+          const result = backtrack(end + 1, newPath)
+          if (result) return result
+        }
+      } else {
+        // 最后一段，检查完整路径
+        if (pathExistsSync(newPath)) {
+          return newPath
+        }
+      }
+    }
+
+    return null
+  }
+
+  const result = backtrack(0, '')
+  codePathCache.set(name, result || '')
+  return result
+}
+
+/**
+ * 解析项目名称
+ * - MD5 hash (32位十六进制): 从 IDE workspaceMappings 查找
+ * - 路径格式 (包含 -): 尝试还原 CodeBuddy Code 的路径格式
  */
 export function resolveProjectName(name: string, mappings?: Map<string, WorkspaceMapping>): string {
+  // IDE source: MD5 hash
   if (mappings && /^[a-f0-9]{32}$/.test(name)) {
     const mapping = mappings.get(name)
     if (mapping) {
       return mapping.displayPath
     }
   }
+
+  // Code source: 路径中 / 替换为 - 的格式
+  // 特征：以大写字母开头（如 Users-、home-），包含 -
+  if (/^[A-Za-z]/.test(name) && name.includes('-')) {
+    const resolved = tryResolveCodePath(name)
+    if (resolved) {
+      return formatDisplayPath(resolved)
+    }
+  }
+
   return name
 }
