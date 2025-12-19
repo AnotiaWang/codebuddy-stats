@@ -496,7 +496,7 @@ async function main(): Promise<void> {
 
     const note =
       currentSource === 'code'
-        ? `针对 CodeBuddy Code ≤ 2.20.0 版本产生的数据，由于没有请求级别的 model ID，用量是基于当前 CodeBuddy Code 设置的 model ID（${data.defaultModelId}）计算价格的`
+        ? `针对 CodeBuddy Code < 2.20.0 版本产生的数据，由于没有请求级别的 model ID，用量是基于当前 CodeBuddy Code 设置的 model ID（${data.defaultModelId}）计算价格的`
         : 'IDE 的 usage 不包含缓存命中/写入 tokens，无法计算缓存相关价格与命中率；成本按 input/output tokens 估算'
 
     switch (currentTab) {
