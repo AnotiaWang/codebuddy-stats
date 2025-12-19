@@ -82,7 +82,7 @@ function getHeatChar(cost: number, maxCost: number): string {
 }
 
 // 渲染 Overview 视图
-function renderOverview(box: any, data: AnalysisData, width: number): void {
+function renderOverview(box: any, data: AnalysisData, width: number, note: string): void {
   const { dailySummary, grandTotal, topModel, topProject, cacheHitRate, activeDays } = data
   const heatmap = generateHeatmapData(dailySummary)
 
@@ -172,11 +172,15 @@ function renderOverview(box: any, data: AnalysisData, width: number): void {
     content += `{cyan-fg}Top project:{/cyan-fg}      ${truncate(shortName, projectMaxLen)} (${formatCost(topProject.cost)})\n`
   }
 
+  if (note) {
+    content += `\n{gray-fg}备注：${note}{/gray-fg}\n`
+  }
+
   box.setContent(content)
 }
 
 // 渲染 By Model 视图
-function renderByModel(box: any, data: AnalysisData, width: number): void {
+function renderByModel(box: any, data: AnalysisData, width: number, note: string): void {
   const { modelTotals, grandTotal } = data
   const sorted = Object.entries(modelTotals).sort((a, b) => b[1].cost - a[1].cost)
 
@@ -216,11 +220,15 @@ function renderByModel(box: any, data: AnalysisData, width: number): void {
     formatTokens(grandTotal.tokens).padStart(12) +
     '{/bold}\n'
 
+  if (note) {
+    content += `\n{gray-fg}备注：${note}{/gray-fg}\n`
+  }
+
   box.setContent(content)
 }
 
 // 渲染 By Project 视图
-function renderByProject(box: any, data: AnalysisData, width: number): void {
+function renderByProject(box: any, data: AnalysisData, width: number, note: string): void {
   const { projectTotals, grandTotal } = data
   const sorted = Object.entries(projectTotals).sort((a, b) => b[1].cost - a[1].cost)
 
@@ -259,11 +267,15 @@ function renderByProject(box: any, data: AnalysisData, width: number): void {
     formatTokens(grandTotal.tokens).padStart(12) +
     '{/bold}\n'
 
+  if (note) {
+    content += `\n{gray-fg}备注：${note}{/gray-fg}\n`
+  }
+
   box.setContent(content)
 }
 
 // 渲染 Daily 视图
-function renderDaily(box: any, data: AnalysisData, scrollOffset = 0, width: number): void {
+function renderDaily(box: any, data: AnalysisData, scrollOffset = 0, width: number, note: string): void {
   const { dailySummary, dailyData } = data
   const sortedDates = Object.keys(dailySummary).sort().reverse()
 
@@ -327,6 +339,10 @@ function renderDaily(box: any, data: AnalysisData, scrollOffset = 0, width: numb
     content += `\n{gray-fg}Showing ${scrollOffset + 1}-${Math.min(scrollOffset + 20, sortedDates.length)} of ${sortedDates.length} days (↑↓ to scroll){/gray-fg}`
   }
 
+  if (note) {
+    content += `\n\n{gray-fg}备注：${note}{/gray-fg}\n`
+  }
+
   box.setContent(content)
 }
 
@@ -374,7 +390,8 @@ async function main(): Promise<void> {
   const options = parseArgs()
 
   console.log('Loading data...')
-  let data = await loadUsageData({ days: options.days })
+  let currentSource: 'code' | 'ide' = 'code'
+  let data = await loadUsageData({ days: options.days, source: currentSource })
 
   if (options.noTui) {
     printTextReport(data)
@@ -385,6 +402,8 @@ async function main(): Promise<void> {
   const screen = blessed.screen({
     smartCSR: true,
     title: 'CodeBuddy Cost Analyzer',
+    forceUnicode: true,
+    fullUnicode: true,
   })
 
   // Tab 状态
@@ -447,6 +466,18 @@ async function main(): Promise<void> {
   // 更新 Tab 栏
   function updateTabBar(): void {
     let content = ' Cost Analysis  '
+
+    content += '{gray-fg}Source:{/gray-fg} '
+    if (currentSource === 'code') {
+      content += '{black-fg}{green-bg} Code {/green-bg}{/black-fg} '
+      content += '{gray-fg}IDE{/gray-fg}  '
+    } else {
+      content += '{gray-fg}Code{/gray-fg} '
+      content += '{black-fg}{green-bg} IDE {/green-bg}{/black-fg}  '
+    }
+
+    content += '{gray-fg}Views:{/gray-fg} '
+
     for (let i = 0; i < tabs.length; i++) {
       if (i === currentTab) {
         content += `{black-fg}{green-bg} ${tabs[i]} {/green-bg}{/black-fg} `
@@ -454,25 +485,31 @@ async function main(): Promise<void> {
         content += `{gray-fg}${tabs[i]}{/gray-fg} `
       }
     }
-    content += ' {gray-fg}(Tab to switch){/gray-fg}'
+    content += ' {gray-fg}(Tab view, s source){/gray-fg}'
     tabBar.setContent(content)
   }
 
   // 更新内容
   function updateContent(): void {
     const width = Number(screen.width) || 80
+
+    const note =
+      currentSource === 'code'
+        ? `针对 CodeBuddy Code ≤ 2.20.0 版本产生的数据，由于没有请求级别的 model ID，用量是基于当前 CodeBuddy Code 设置的 model ID（${data.defaultModelId}）计算价格的`
+        : 'IDE 的 usage 不包含缓存命中/写入 tokens，无法计算缓存相关价格与命中率；成本按 input/output tokens 估算'
+
     switch (currentTab) {
       case 0:
-        renderOverview(contentBox, data, width)
+        renderOverview(contentBox, data, width, note)
         break
       case 1:
-        renderByModel(contentBox, data, width)
+        renderByModel(contentBox, data, width, note)
         break
       case 2:
-        renderByProject(contentBox, data, width)
+        renderByProject(contentBox, data, width, note)
         break
       case 3:
-        renderDaily(contentBox, data, dailyScrollOffset, width)
+        renderDaily(contentBox, data, dailyScrollOffset, width, note)
         break
     }
   }
@@ -480,7 +517,8 @@ async function main(): Promise<void> {
   // 更新状态栏
   function updateStatusBar(): void {
     const daysInfo = options.days ? `Last ${options.days} days` : 'All time'
-    const leftContent = ` ${daysInfo} | Total: ${formatCost(data.grandTotal.cost)} | q quit, Tab switch, r refresh`
+    const sourceInfo = currentSource === 'code' ? 'Code' : 'IDE'
+    const leftContent = ` ${daysInfo} | Source: ${sourceInfo} | Total: ${formatCost(data.grandTotal.cost)} | q quit, Tab view, s source, r refresh`
     const rightContent = `v${VERSION} `
     const width = Number(screen.width) || 80
     const padding = Math.max(0, width - leftContent.length - rightContent.length)
@@ -530,13 +568,29 @@ async function main(): Promise<void> {
     statusBar.setContent(' {yellow-fg}Reloading...{/yellow-fg}')
     screen.render()
     try {
-      data = await loadUsageData({ days: options.days })
+      data = await loadUsageData({ days: options.days, source: currentSource })
       dailyScrollOffset = 0
       updateTabBar()
       updateContent()
       updateStatusBar()
     } catch (err) {
       statusBar.setContent(` {red-fg}Reload failed: ${String(err)}{/red-fg}`)
+    }
+    screen.render()
+  })
+
+  screen.key(['s'], async () => {
+    statusBar.setContent(' {yellow-fg}Switching source...{/yellow-fg}')
+    screen.render()
+    try {
+      currentSource = currentSource === 'code' ? 'ide' : 'code'
+      data = await loadUsageData({ days: options.days, source: currentSource })
+      dailyScrollOffset = 0
+      updateTabBar()
+      updateContent()
+      updateStatusBar()
+    } catch (err) {
+      statusBar.setContent(` {red-fg}Switch source failed: ${String(err)}{/red-fg}`)
     }
     screen.render()
   })

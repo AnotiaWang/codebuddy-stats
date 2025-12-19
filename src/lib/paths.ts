@@ -23,6 +23,24 @@ export function getConfigDir(): string {
 }
 
 /**
+ * 获取 CodeBuddy IDE (CodeBuddyExtension) 数据目录
+ * - macOS: ~/Library/Application Support/CodeBuddyExtension/Data
+ * - Windows: %APPDATA%/CodeBuddyExtension/Data
+ * - Linux: $XDG_CONFIG_HOME/CodeBuddyExtension/Data 或 ~/.config/CodeBuddyExtension/Data
+ */
+export function getIdeDataDir(): string {
+  if (process.platform === 'darwin') {
+    return path.join(os.homedir(), 'Library', 'Application Support', 'CodeBuddyExtension', 'Data')
+  }
+  if (process.platform === 'win32') {
+    const appData = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming')
+    return path.join(appData, 'CodeBuddyExtension', 'Data')
+  }
+  const xdgConfigHome = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config')
+  return path.join(xdgConfigHome, 'CodeBuddyExtension', 'Data')
+}
+
+/**
  * 获取项目数据目录
  */
 export function getProjectsDir(): string {
