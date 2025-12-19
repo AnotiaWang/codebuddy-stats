@@ -1,0 +1,35 @@
+{
+  "name": "codebuddy-stats",
+  "version": "1.0.1",
+  "type": "module",
+  "main": "dist/index.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AnotiaWang/codebuddy-stats"
+  },
+  "bin": {
+    "codebuddy-stats": "./dist/index.js",
+    "cbs": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx --watch src/index.ts",
+    "prestart": "npm run build",
+    "start": "node dist/index.js",
+    "pretext": "npm run build",
+    "text": "node dist/index.js --no-tui"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "CodeBuddy AI cost analyzer with TUI",
+  "dependencies": {
+    "blessed": "^0.1.81"
+  },
+  "devDependencies": {
+    "@types/blessed": "^0.1.27",
+    "@types/node": "^25.0.3",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
