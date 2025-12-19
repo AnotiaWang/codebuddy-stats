@@ -1,6 +1,6 @@
 {
   "name": "codebuddy-stats",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "type": "module",
   "main": "dist/index.js",
   "files": [
@@ -22,10 +22,22 @@
     "pretext": "npm run build",
     "text": "node dist/index.js --no-tui"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "codebuddy",
+    "codebuddy-code",
+    "ai",
+    "cost",
+    "analyzer",
+    "statistics",
+    "tui",
+    "cli",
+    "token",
+    "usage"
+  ],
+  "author": "AnotiaWang",
   "license": "ISC",
-  "description": "CodeBuddy AI cost analyzer with TUI",
+  "packageManager": "pnpm@9.15.1",
+  "description": "CodeBuddy AI cost analyzer with terminal UI",
   "dependencies": {
     "blessed": "^0.1.81"
   },
