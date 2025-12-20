@@ -302,8 +302,9 @@ function renderDaily(box: any, data: AnalysisData, scrollOffset = 0, width: numb
   const availableWidth = width - 6 // padding
   const dateCol = 12
   const costCol = 12
+  const tokensCol = 10
   const reqCol = 10
-  const fixedCols = dateCol + costCol + reqCol
+  const fixedCols = dateCol + costCol + tokensCol + reqCol
   const remainingWidth = availableWidth - fixedCols
   const modelCol = Math.max(15, Math.min(25, Math.floor(remainingWidth * 0.4)))
   const projectCol = Math.max(20, remainingWidth - modelCol)
@@ -313,6 +314,7 @@ function renderDaily(box: any, data: AnalysisData, scrollOffset = 0, width: numb
     '{underline}' +
     'Date'.padEnd(dateCol) +
     '~Cost'.padStart(costCol) +
+    'Tokens'.padStart(tokensCol) +
     'Requests'.padStart(reqCol) +
     'Top Model'.padStart(modelCol) +
     'Top Project'.padStart(projectCol) +
@@ -348,6 +350,7 @@ function renderDaily(box: any, data: AnalysisData, scrollOffset = 0, width: numb
     content +=
       date.padEnd(dateCol) +
       formatCost(daySummary.cost).padStart(costCol) +
+      formatTokens(daySummary.tokens).padStart(tokensCol) +
       formatNumber(daySummary.requests).padStart(reqCol) +
       truncate(topModel.id, modelCol - 1).padStart(modelCol) +
       truncate(shortProject, projectCol - 1).padStart(projectCol) +
