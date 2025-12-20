@@ -538,10 +538,30 @@ async function main(): Promise<void> {
   function updateStatusBar(): void {
     const daysInfo = options.days ? `Last ${options.days} days` : 'All time'
     const sourceInfo = currentSource === 'code' ? 'Code' : 'IDE'
-    const leftContent = ` ${daysInfo} | Source: ${sourceInfo} | Total: ${formatCost(data.grandTotal.cost)} | q quit, Tab view, s source, r refresh`
-    const rightContent = `v${VERSION} `
+    const rightContent = `v${VERSION}`
     const width = Number(screen.width) || 80
-    const padding = Math.max(0, width - leftContent.length - rightContent.length)
+
+    // 根据剩余宽度决定左侧内容详细程度（预留版本号空间）
+    const reservedForRight = rightContent.length + 2 // 版本号 + 两侧空格
+    const availableForLeft = width - reservedForRight
+
+    let leftContent: string
+    const fullContent = ` ${daysInfo} | Source: ${sourceInfo} | Total: ${formatCost(data.grandTotal.cost)} | q quit, Tab view, s source, r refresh`
+    const mediumContent = ` ${daysInfo} | ${sourceInfo} | ${formatCost(data.grandTotal.cost)} | q/Tab/s/r`
+    const shortContent = ` ${sourceInfo} | ${formatCost(data.grandTotal.cost)} | q/Tab/s/r`
+    const minContent = ` ${formatCost(data.grandTotal.cost)}`
+
+    if (fullContent.length <= availableForLeft) {
+      leftContent = fullContent
+    } else if (mediumContent.length <= availableForLeft) {
+      leftContent = mediumContent
+    } else if (shortContent.length <= availableForLeft) {
+      leftContent = shortContent
+    } else {
+      leftContent = minContent
+    }
+
+    const padding = Math.max(1, width - leftContent.length - rightContent.length)
     statusBar.setContent(leftContent + ' '.repeat(padding) + rightContent)
   }
 
@@ -617,7 +637,9 @@ async function main(): Promise<void> {
 
   // 监听窗口大小变化
   screen.on('resize', () => {
+    updateTabBar()
     updateContent()
+    updateStatusBar()
     screen.render()
   })
 
