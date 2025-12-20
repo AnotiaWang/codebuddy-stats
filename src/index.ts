@@ -213,7 +213,7 @@ function renderByModel(box: any, data: AnalysisData, width: number, note: string
   content +=
     '{underline}' +
     'Model'.padEnd(modelCol) +
-    'Cost'.padStart(12) +
+    '~Cost'.padStart(12) +
     'Requests'.padStart(12) +
     'Tokens'.padStart(12) +
     'Avg/Req'.padStart(10) +
@@ -261,7 +261,7 @@ function renderByProject(box: any, data: AnalysisData, width: number, note: stri
   content +=
     '{underline}' +
     'Project'.padEnd(projectCol) +
-    'Cost'.padStart(12) +
+    '~Cost'.padStart(12) +
     'Requests'.padStart(12) +
     'Tokens'.padStart(12) +
     '{/underline}\n'
@@ -312,7 +312,7 @@ function renderDaily(box: any, data: AnalysisData, scrollOffset = 0, width: numb
   content +=
     '{underline}' +
     'Date'.padEnd(dateCol) +
-    'Cost'.padStart(costCol) +
+    '~Cost'.padStart(costCol) +
     'Requests'.padStart(reqCol) +
     'Top Model'.padStart(modelCol) +
     'Top Project'.padStart(projectCol) +
