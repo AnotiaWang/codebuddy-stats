@@ -26,7 +26,7 @@ export function getConfigDir(): string {
  * 获取 CodeBuddy IDE (CodeBuddyExtension) 数据目录
  * - macOS: ~/Library/Application Support/CodeBuddyExtension/Data
  * - Windows: %APPDATA%/CodeBuddyExtension/Data
- * - Linux: $XDG_CONFIG_HOME/CodeBuddyExtension/Data 或 ~/.config/CodeBuddyExtension/Data
+ * - Linux: $XDG_DATA_HOME/CodeBuddyExtension/Data 或 ~/.local/share/CodeBuddyExtension/Data
  */
 export function getIdeDataDir(): string {
   if (process.platform === 'darwin') {
@@ -36,8 +36,8 @@ export function getIdeDataDir(): string {
     const appData = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming')
     return path.join(appData, 'CodeBuddyExtension', 'Data')
   }
-  const xdgConfigHome = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config')
-  return path.join(xdgConfigHome, 'CodeBuddyExtension', 'Data')
+  const xdgDataHome = process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share')
+  return path.join(xdgDataHome, 'CodeBuddyExtension', 'Data')
 }
 
 /**
