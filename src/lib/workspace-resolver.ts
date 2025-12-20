@@ -494,8 +494,8 @@ function pathExistsSync(p: string): boolean {
  * 尝试将 CodeBuddy Code 的项目名（路径中 / 替换为 -）还原为真实路径
  * 使用回溯搜索，因为目录名本身可能包含 -
  *
- * 例如: "Users-anoti-Documents-project-codebudy-cost-analyzer"
- *    -> "/Users/anoti/Documents/project/codebudy-cost-analyzer"
+ * 例如: "Users-foo-Documents-project-codebudy-cost-analyzer"
+ *    -> "/Users/foo/Documents/project/codebudy-cost-analyzer"
  */
 function tryResolveCodePath(name: string): string | null {
   // 检查缓存

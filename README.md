@@ -2,6 +2,8 @@
 
 一个用于分析 CodeBuddy 系列产品使用成本的命令行工具，支持交互式 TUI 界面和纯文本输出。
 
+![](./assets/README-1.jpg)
+
 ## 功能特性
 
 - **双数据源支持** - 同时支持 CodeBuddy Code 和 CodeBuddy IDE（VS Code 扩展）
@@ -68,7 +70,7 @@ cbs --help
 按项目分类的费用统计，方便了解不同项目的 AI 使用成本。
 
 工具会自动将项目标识解析为可读路径：
-- **Code 模式**: 将 `Users-anoti-Documents-project-xxx` 还原为 `~/Documents/project/xxx`
+- **Code 模式**: 将 `Users-foo-Documents-project-xxx` 还原为 `~/Documents/project/xxx`
 - **IDE 模式**: 将 MD5 hash 映射为实际工作区路径
 
 ### Daily

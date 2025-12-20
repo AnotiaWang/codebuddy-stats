@@ -166,7 +166,7 @@ function renderOverview(box: any, data: AnalysisData, width: number, note: strin
 
   if (width >= 80) {
     // 双列布局
-    content += `{green-fg}Total cost:{/green-fg}       ${formatCost(grandTotal.cost).padStart(12)}    `
+    content += `{green-fg}~Total cost:{/green-fg}      ${formatCost(grandTotal.cost).padStart(12)}    `
     content += `{green-fg}Active days:{/green-fg}      ${String(activeDays).padStart(8)}\n`
     content += `{green-fg}Total tokens:{/green-fg}     ${formatTokens(grandTotal.tokens).padStart(12)}    `
     content += `{green-fg}Total requests:{/green-fg}   ${formatNumber(grandTotal.requests).padStart(8)}\n`
@@ -174,7 +174,7 @@ function renderOverview(box: any, data: AnalysisData, width: number, note: strin
     content += `{green-fg}Avg daily cost:{/green-fg}   ${formatCost(avgDailyCost).padStart(8)}\n\n`
   } else {
     // 单列布局
-    content += `{green-fg}Total cost:{/green-fg}       ${formatCost(grandTotal.cost)}\n`
+    content += `{green-fg}~Total cost:{/green-fg}      ${formatCost(grandTotal.cost)}\n`
     content += `{green-fg}Total tokens:{/green-fg}     ${formatTokens(grandTotal.tokens)}\n`
     content += `{green-fg}Total requests:{/green-fg}   ${formatNumber(grandTotal.requests)}\n`
     content += `{green-fg}Active days:{/green-fg}      ${activeDays}\n`
