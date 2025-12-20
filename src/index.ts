@@ -50,27 +50,6 @@ Options:
   return options
 }
 
-type HeatmapData = {
-  dates: string[]
-  costs: number[]
-  maxCost: number
-}
-
-// 生成热力图数据
-function generateHeatmapData(dailySummary: AnalysisData['dailySummary']): HeatmapData {
-  const sortedDates = Object.keys(dailySummary).sort()
-  if (sortedDates.length === 0) return { dates: [], costs: [], maxCost: 0 }
-
-  const costs = sortedDates.map(d => dailySummary[d]?.cost ?? 0)
-  const maxCost = Math.max(...costs)
-
-  return {
-    dates: sortedDates,
-    costs,
-    maxCost,
-  }
-}
-
 // 获取热力图字符
 function getHeatChar(cost: number, maxCost: number): string {
   if (cost === 0) return '·'
@@ -84,7 +63,6 @@ function getHeatChar(cost: number, maxCost: number): string {
 // 渲染 Overview 视图
 function renderOverview(box: any, data: AnalysisData, width: number, note: string): void {
   const { dailySummary, grandTotal, topModel, topProject, cacheHitRate, activeDays } = data
-  const heatmap = generateHeatmapData(dailySummary)
 
   // 根据宽度计算热力图周数
   const availableWidth = width - 10
@@ -118,7 +96,46 @@ function renderOverview(box: any, data: AnalysisData, width: number, note: strin
     weeks.push(week)
   }
 
-  const maxCost = heatmap.maxCost || 1
+  // 以“当前热力图窗口”的最大值做归一化（避免历史极值导致近期全是浅色）
+  const visibleCosts: number[] = []
+  for (const week of weeks) {
+    for (const date of week) {
+      if (!date || date > todayStr) continue
+      visibleCosts.push(dailySummary[date]?.cost ?? 0)
+    }
+  }
+  const maxCost = Math.max(...visibleCosts, 0) || 1
+
+  // 月份标尺（在列上方标注月份变化）
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  const colWidth = 2 // 每周一列：字符 + 空格
+  const heatStartCol = 4 // 左侧周几标签宽度
+  const headerLen = heatStartCol + weeks.length * colWidth
+  const monthHeader = Array.from({ length: headerLen }, () => ' ')
+  let lastMonth = -1
+  let lastPlacedAt = -999
+
+  for (let i = 0; i < weeks.length; i++) {
+    const week = weeks[i]!
+    const repDate = week.find(d => d && d <= todayStr) ?? week[0]
+    if (!repDate) continue
+
+    const m = new Date(repDate).getMonth()
+    if (m !== lastMonth) {
+      const label = monthNames[m]!
+      const pos = heatStartCol + i * colWidth
+
+      // 避免月份标签过于拥挤/相互覆盖
+      if (pos - lastPlacedAt >= 4 && pos + label.length <= monthHeader.length) {
+        for (let k = 0; k < label.length; k++) monthHeader[pos + k] = label[k]!
+        lastPlacedAt = pos
+      }
+      lastMonth = m
+    }
+  }
+
+  content += `{gray-fg}${monthHeader.join('').trimEnd()}{/gray-fg}\n`
+
   const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
   for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++) {
@@ -136,6 +153,8 @@ function renderOverview(box: any, data: AnalysisData, width: number, note: strin
     content += row + '\n'
   }
 
+  const rangeStart = weeks[0]?.[0] ?? todayStr
+  content += `{gray-fg}Range: ${rangeStart} → ${todayStr}{/gray-fg}\n`
   content += '    Less {gray-fg}·░▒▓{/gray-fg}{white-fg}█{/white-fg} More\n\n'
 
   // 汇总指标 - 根据宽度决定布局
