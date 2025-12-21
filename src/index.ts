@@ -35,9 +35,9 @@ function parseArgs(): CliOptions {
       options.noTui = true
     } else if (args[i] === '--help' || args[i] === '-h') {
       console.log(`
-CodeBuddy Cost Analyzer
+CodeBuddy Stats
 
-Usage: cost-analyzer [options]
+Usage: codebuddy-stats [options]
 
 Options:
   --days <n>    只显示最近 n 天的数据
@@ -372,7 +372,7 @@ function renderDaily(box: any, data: AnalysisData, scrollOffset = 0, width: numb
 function printTextReport(data: AnalysisData): void {
   const { modelTotals, projectTotals, grandTotal, topModel, topProject, cacheHitRate, activeDays } = data
 
-  console.log('\n🤖 CodeBuddy Cost Analysis Report')
+  console.log('\n🤖 CodeBuddy Stats Report')
   console.log('='.repeat(50))
 
   console.log(`\nTotal cost:        ${formatCost(grandTotal.cost)}`)
@@ -424,7 +424,7 @@ async function main(): Promise<void> {
   // 创建 TUI
   const screen = blessed.screen({
     smartCSR: true,
-    title: 'CodeBuddy Cost Analyzer',
+    title: 'CodeBuddy Stats',
     forceUnicode: true,
     fullUnicode: true,
   })
@@ -488,7 +488,7 @@ async function main(): Promise<void> {
 
   // 更新 Tab 栏
   function updateTabBar(): void {
-    let content = ' Cost Analysis  '
+    let content = ' CodeBuddy Stats  '
 
     content += '{gray-fg}Source:{/gray-fg} '
     if (currentSource === 'code') {

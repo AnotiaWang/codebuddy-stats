@@ -37,7 +37,7 @@
   "author": "AnotiaWang",
   "license": "ISC",
   "packageManager": "pnpm@9.15.1",
-  "description": "CodeBuddy AI cost analyzer with terminal UI",
+  "description": "CodeBuddy AI usage statistics with terminal UI",
   "dependencies": {
     "blessed": "^0.1.81"
   },
