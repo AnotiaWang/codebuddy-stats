@@ -294,7 +294,14 @@ function renderByProject(box: any, data: AnalysisData, width: number, note: stri
 }
 
 // 渲染 Daily 视图
-function renderDaily(box: any, data: AnalysisData, scrollOffset = 0, width: number, note: string): void {
+function renderDaily(
+  box: any,
+  data: AnalysisData,
+  scrollOffset = 0,
+  width: number,
+  note: string,
+  pageSize: number,
+): void {
   const { dailySummary, dailyData } = data
   const sortedDates = Object.keys(dailySummary).sort().reverse()
 
@@ -320,7 +327,8 @@ function renderDaily(box: any, data: AnalysisData, scrollOffset = 0, width: numb
     'Top Project'.padStart(projectCol) +
     '{/underline}\n'
 
-  const visibleDates = sortedDates.slice(scrollOffset, scrollOffset + 20)
+  const safePageSize = Math.max(1, Math.floor(pageSize || 1))
+  const visibleDates = sortedDates.slice(scrollOffset, scrollOffset + safePageSize)
 
   for (const date of visibleDates) {
     const daySummary = dailySummary[date]
@@ -357,8 +365,8 @@ function renderDaily(box: any, data: AnalysisData, scrollOffset = 0, width: numb
       '\n'
   }
 
-  if (sortedDates.length > 20) {
-    content += `\n{gray-fg}Showing ${scrollOffset + 1}-${Math.min(scrollOffset + 20, sortedDates.length)} of ${sortedDates.length} days (↑↓ to scroll){/gray-fg}`
+  if (sortedDates.length > safePageSize) {
+    content += `\n{gray-fg}Showing ${scrollOffset + 1}-${Math.min(scrollOffset + safePageSize, sortedDates.length)} of ${sortedDates.length} days (↑↓ to scroll){/gray-fg}`
   }
 
   if (note) {
@@ -433,6 +441,7 @@ async function main(): Promise<void> {
   const tabs = ['Overview', 'By Model', 'By Project', 'Daily']
   let currentTab = 0
   let dailyScrollOffset = 0
+  let dailyPageSize = 20
 
   // Tab 栏
   const tabBar = blessed.box({
@@ -521,6 +530,28 @@ async function main(): Promise<void> {
         ? `针对 CodeBuddy Code < 2.20.0 版本产生的数据，由于没有请求级别的 model ID，用量是基于当前 CodeBuddy Code 设置的 model ID（${data.defaultModelId}）计算价格的`
         : 'IDE 的 usage 不包含缓存命中/写入 tokens，无法计算缓存相关价格与命中率；成本按 input/output tokens 估算'
 
+    // Daily 视图：根据当前可用高度动态调整每页行数，避免 resize 后内容溢出
+    {
+      const screenHeight = Number(screen.height) || 24
+      const contentBoxHeight = Math.max(1, screenHeight - 5) // 对应 contentBox: height = '100%-5'
+      const paddingTop = Number((contentBox as any).padding?.top ?? 0)
+      const paddingBottom = Number((contentBox as any).padding?.bottom ?? 0)
+      const innerHeight = Math.max(1, contentBoxHeight - paddingTop - paddingBottom)
+
+      const baseLines = 3 // title + blank + header
+      const footerLines = 2 // blank + hint line（最坏情况）
+      const availableTextWidth = Math.max(20, width - 8)
+      const estimatedNoteLines = note
+        ? Math.max(1, Math.ceil(`备注：${note}`.length / availableTextWidth))
+        : 0
+      const noteLines = note ? 2 + estimatedNoteLines : 0 // 两行空行 + 备注文本
+      const reservedLines = baseLines + footerLines + noteLines + 1 // safety
+
+      dailyPageSize = Math.max(1, innerHeight - reservedLines)
+      const maxOffset = Math.max(0, Object.keys(data.dailySummary).length - dailyPageSize)
+      dailyScrollOffset = Math.min(dailyScrollOffset, maxOffset)
+    }
+
     switch (currentTab) {
       case 0:
         renderOverview(contentBox, data, width, note)
@@ -532,7 +563,7 @@ async function main(): Promise<void> {
         renderByProject(contentBox, data, width, note)
         break
       case 3:
-        renderDaily(contentBox, data, dailyScrollOffset, width, note)
+        renderDaily(contentBox, data, dailyScrollOffset, width, note, dailyPageSize)
         break
     }
   }
@@ -595,7 +626,7 @@ async function main(): Promise<void> {
 
   screen.key(['down', 'j'], () => {
     if (currentTab === 3) {
-      const maxOffset = Math.max(0, Object.keys(data.dailySummary).length - 20)
+      const maxOffset = Math.max(0, Object.keys(data.dailySummary).length - dailyPageSize)
       dailyScrollOffset = Math.min(maxOffset, dailyScrollOffset + 1)
       updateContent()
       screen.render()
