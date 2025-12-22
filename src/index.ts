@@ -437,6 +437,7 @@ function renderDaily(
   box: any,
   data: AnalysisData,
   scrollOffset = 0,
+  selectedIndex = 0,
   width: number,
   note: string,
   pageSize: number,
@@ -469,7 +470,8 @@ function renderDaily(
   const safePageSize = Math.max(1, Math.floor(pageSize || 1))
   const visibleDates = sortedDates.slice(scrollOffset, scrollOffset + safePageSize)
 
-  for (const date of visibleDates) {
+  for (let i = 0; i < visibleDates.length; i++) {
+    const date = visibleDates[i]!
     const daySummary = dailySummary[date]
     const dayData = dailyData[date]
     if (!daySummary || !dayData) continue
@@ -494,22 +496,115 @@ function renderDaily(
 
     const shortProject = resolveProjectName(topProject.name, data.workspaceMappings)
 
-    content +=
+    const isSelected = scrollOffset + i === selectedIndex
+    const rowContent =
       date.padEnd(dateCol) +
       formatCost(daySummary.cost).padStart(costCol) +
       formatTokens(daySummary.tokens).padStart(tokensCol) +
       formatNumber(daySummary.requests).padStart(reqCol) +
       truncate(topModel.id, modelCol - 1).padStart(modelCol) +
-      truncate(shortProject, projectCol - 1).padStart(projectCol) +
-      '\n'
+      truncate(shortProject, projectCol - 1).padStart(projectCol)
+
+    if (isSelected) {
+      content += `{black-fg}{green-bg}${rowContent}{/green-bg}{/black-fg}\n`
+    } else {
+      content += rowContent + '\n'
+    }
   }
 
   if (sortedDates.length > safePageSize) {
-    content += `\n{gray-fg}Showing ${scrollOffset + 1}-${Math.min(scrollOffset + safePageSize, sortedDates.length)} of ${sortedDates.length} days (↑↓ to scroll){/gray-fg}`
+    content += `\n{gray-fg}Showing ${scrollOffset + 1}-${Math.min(scrollOffset + safePageSize, sortedDates.length)} of ${sortedDates.length} days (↑↓ scroll, Enter detail){/gray-fg}`
+  } else {
+    content += `\n{gray-fg}(↑↓ select, Enter detail){/gray-fg}`
   }
 
   if (note) {
     content += `\n\n{gray-fg}备注：${note}{/gray-fg}\n`
+  }
+
+  box.setContent(content)
+}
+
+// 渲染 Daily Detail 视图（某一天的详细数据）
+function renderDailyDetail(
+  box: any,
+  data: AnalysisData,
+  date: string,
+  scrollOffset = 0,
+  width: number,
+  pageSize: number,
+): void {
+  const { dailySummary, dailyData } = data
+  const daySummary = dailySummary[date]
+  const dayData = dailyData[date]
+
+  if (!daySummary || !dayData) {
+    box.setContent(`{bold}${date}{/bold}\n\nNo data available for this date.`)
+    return
+  }
+
+  // 汇总当天所有模型的用量
+  const modelStats: Record<string, { cost: number; tokens: number; requests: number }> = {}
+  for (const [, models] of Object.entries(dayData)) {
+    for (const [model, stats] of Object.entries(models)) {
+      const s = stats as any
+      if (!modelStats[model]) {
+        modelStats[model] = { cost: 0, tokens: 0, requests: 0 }
+      }
+      modelStats[model].cost += Number(s.cost ?? 0)
+      modelStats[model].tokens += Number(s.totalTokens ?? 0)
+      modelStats[model].requests += Number(s.requests ?? 0)
+    }
+  }
+
+  const sortedModels = Object.entries(modelStats).sort((a, b) => b[1].cost - a[1].cost)
+
+  // 根据宽度计算列宽
+  const availableWidth = width - 6 // padding
+  const fixedCols = 12 + 12 + 12 // Cost + Requests + Tokens
+  const modelCol = Math.max(25, availableWidth - fixedCols)
+  const totalWidth = modelCol + fixedCols
+
+  let content = `{bold}${date} - Model Usage Details{/bold}\n\n`
+
+  // 当天汇总
+  content += `{green-fg}Total cost:{/green-fg}     ${formatCost(daySummary.cost)}    `
+  content += `{green-fg}Tokens:{/green-fg} ${formatTokens(daySummary.tokens)}    `
+  content += `{green-fg}Requests:{/green-fg} ${formatNumber(daySummary.requests)}\n\n`
+
+  content +=
+    '{underline}' +
+    'Model'.padEnd(modelCol) +
+    '~Cost'.padStart(12) +
+    'Requests'.padStart(12) +
+    'Tokens'.padStart(12) +
+    '{/underline}\n'
+
+  const safePageSize = Math.max(1, Math.floor(pageSize || 1))
+  const visibleModels = sortedModels.slice(scrollOffset, scrollOffset + safePageSize)
+
+  for (const [modelId, stats] of visibleModels) {
+    content +=
+      truncate(modelId, modelCol - 1).padEnd(modelCol) +
+      formatCost(stats.cost).padStart(12) +
+      formatNumber(stats.requests).padStart(12) +
+      formatTokens(stats.tokens).padStart(12) +
+      '\n'
+  }
+
+  content += '─'.repeat(totalWidth) + '\n'
+  content +=
+    '{bold}' +
+    `Total (${sortedModels.length} models)`.padEnd(modelCol) +
+    formatCost(daySummary.cost).padStart(12) +
+    formatNumber(daySummary.requests).padStart(12) +
+    formatTokens(daySummary.tokens).padStart(12) +
+    '{/bold}\n'
+
+  if (sortedModels.length > safePageSize) {
+    content += `\n{gray-fg}Showing ${scrollOffset + 1}-${Math.min(scrollOffset + safePageSize, sortedModels.length)} of ${sortedModels.length} models (↑↓ scroll, Esc back){/gray-fg}`
+  } else {
+    content += `\n{gray-fg}(Esc back to Daily list){/gray-fg}`
   }
 
   box.setContent(content)
@@ -583,10 +678,14 @@ async function main(): Promise<void> {
   let modelScrollOffset = 0
   let projectScrollOffset = 0
   let dailyScrollOffset = 0
+  let dailySelectedIndex = 0
+  let dailyDetailDate: string | null = null // 当前查看详情的日期，null 表示在列表视图
+  let dailyDetailScrollOffset = 0
 
   let modelPageSize = 10
   let projectPageSize = 10
   let dailyPageSize = 20
+  let dailyDetailPageSize = 10
 
   // Tab 栏
   const tabBar = blessed.box({
@@ -697,6 +796,10 @@ async function main(): Promise<void> {
     const dailyReservedLines = baseLines + hintLines + noteLines + 1 // safety
     dailyPageSize = Math.max(1, innerHeight - dailyReservedLines)
 
+    // Daily Detail：有 summary + total 行
+    const dailyDetailReservedLines = baseLines + 3 + 2 + hintLines + 1 // summary(3) + separator + total + safety
+    dailyDetailPageSize = Math.max(1, innerHeight - dailyDetailReservedLines)
+
     const modelMaxOffset = Math.max(0, Object.keys(data.modelTotals).length - modelPageSize)
     modelScrollOffset = Math.min(modelScrollOffset, modelMaxOffset)
 
@@ -705,6 +808,7 @@ async function main(): Promise<void> {
 
     const dailyMaxOffset = Math.max(0, Object.keys(data.dailySummary).length - dailyPageSize)
     dailyScrollOffset = Math.min(dailyScrollOffset, dailyMaxOffset)
+    dailySelectedIndex = Math.min(dailySelectedIndex, Math.max(0, Object.keys(data.dailySummary).length - 1))
 
     switch (currentTab) {
       case 0:
@@ -717,7 +821,11 @@ async function main(): Promise<void> {
         renderByProject(contentBox, data, projectScrollOffset, width, note, projectPageSize)
         break
       case 3:
-        renderDaily(contentBox, data, dailyScrollOffset, width, note, dailyPageSize)
+        if (dailyDetailDate) {
+          renderDailyDetail(contentBox, data, dailyDetailDate, dailyDetailScrollOffset, width, dailyDetailPageSize)
+        } else {
+          renderDaily(contentBox, data, dailyScrollOffset, dailySelectedIndex, width, note, dailyPageSize)
+        }
         break
     }
   }
@@ -755,10 +863,12 @@ async function main(): Promise<void> {
 
   // 键盘事件
   screen.key(['tab'], () => {
+    if (dailyDetailDate) return // 在 detail 视图时禁用 tab 切换
     currentTab = (currentTab + 1) % tabs.length
     modelScrollOffset = 0
     projectScrollOffset = 0
     dailyScrollOffset = 0
+    dailySelectedIndex = 0
     contentBox.scrollTo(0)
     updateTabBar()
     updateContent()
@@ -766,10 +876,12 @@ async function main(): Promise<void> {
   })
 
   screen.key(['S-tab'], () => {
+    if (dailyDetailDate) return // 在 detail 视图时禁用 tab 切换
     currentTab = (currentTab - 1 + tabs.length) % tabs.length
     modelScrollOffset = 0
     projectScrollOffset = 0
     dailyScrollOffset = 0
+    dailySelectedIndex = 0
     contentBox.scrollTo(0)
     updateTabBar()
     updateContent()
@@ -790,7 +902,19 @@ async function main(): Promise<void> {
       return
     }
     if (currentTab === 3) {
-      dailyScrollOffset = Math.max(0, dailyScrollOffset - 1)
+      if (dailyDetailDate) {
+        // 在 detail 视图中滚动
+        dailyDetailScrollOffset = Math.max(0, dailyDetailScrollOffset - 1)
+      } else {
+        // 在列表视图中移动选中项
+        if (dailySelectedIndex > 0) {
+          dailySelectedIndex--
+          // 如果选中项在当前页之上，滚动页面
+          if (dailySelectedIndex < dailyScrollOffset) {
+            dailyScrollOffset = dailySelectedIndex
+          }
+        }
+      }
       updateContent()
       screen.render()
       return
@@ -816,8 +940,27 @@ async function main(): Promise<void> {
       return
     }
     if (currentTab === 3) {
-      const maxOffset = Math.max(0, Object.keys(data.dailySummary).length - dailyPageSize)
-      dailyScrollOffset = Math.min(maxOffset, dailyScrollOffset + 1)
+      if (dailyDetailDate) {
+        // 在 detail 视图中滚动（需要计算当天的模型数量）
+        const dayData = data.dailyData[dailyDetailDate]
+        if (dayData) {
+          const modelCount = new Set(
+            Object.values(dayData).flatMap(models => Object.keys(models)),
+          ).size
+          const maxOffset = Math.max(0, modelCount - dailyDetailPageSize)
+          dailyDetailScrollOffset = Math.min(maxOffset, dailyDetailScrollOffset + 1)
+        }
+      } else {
+        // 在列表视图中移动选中项
+        const totalDays = Object.keys(data.dailySummary).length
+        if (dailySelectedIndex < totalDays - 1) {
+          dailySelectedIndex++
+          // 如果选中项超出当前页，滚动页面
+          if (dailySelectedIndex >= dailyScrollOffset + dailyPageSize) {
+            dailyScrollOffset = dailySelectedIndex - dailyPageSize + 1
+          }
+        }
+      }
       updateContent()
       screen.render()
       return
@@ -825,6 +968,29 @@ async function main(): Promise<void> {
 
     contentBox.scroll(1)
     screen.render()
+  })
+
+  screen.key(['enter'], () => {
+    if (currentTab === 3 && !dailyDetailDate) {
+      // 进入 detail 视图
+      const sortedDates = Object.keys(data.dailySummary).sort().reverse()
+      if (sortedDates[dailySelectedIndex]) {
+        dailyDetailDate = sortedDates[dailySelectedIndex]!
+        dailyDetailScrollOffset = 0
+        updateContent()
+        screen.render()
+      }
+    }
+  })
+
+  screen.key(['escape', 'backspace'], () => {
+    if (currentTab === 3 && dailyDetailDate) {
+      // 返回列表视图
+      dailyDetailDate = null
+      dailyDetailScrollOffset = 0
+      updateContent()
+      screen.render()
+    }
   })
 
   screen.key(['q', 'C-c'], () => {
@@ -840,6 +1006,9 @@ async function main(): Promise<void> {
       modelScrollOffset = 0
       projectScrollOffset = 0
       dailyScrollOffset = 0
+      dailySelectedIndex = 0
+      dailyDetailDate = null
+      dailyDetailScrollOffset = 0
       contentBox.scrollTo(0)
       updateTabBar()
       updateContent()
@@ -859,6 +1028,9 @@ async function main(): Promise<void> {
       modelScrollOffset = 0
       projectScrollOffset = 0
       dailyScrollOffset = 0
+      dailySelectedIndex = 0
+      dailyDetailDate = null
+      dailyDetailScrollOffset = 0
       contentBox.scrollTo(0)
       updateTabBar()
       updateContent()
