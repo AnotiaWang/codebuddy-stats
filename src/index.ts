@@ -61,145 +61,263 @@ function getHeatChar(cost: number, maxCost: number): string {
 }
 
 // 渲染 Overview 视图
-function renderOverview(box: any, data: AnalysisData, width: number, note: string): void {
+function renderOverview(box: any, data: AnalysisData, width: number, height: number, note: string): void {
   const { dailySummary, grandTotal, topModel, topProject, cacheHitRate, activeDays } = data
 
-  // 根据宽度计算热力图周数
-  const availableWidth = width - 10
-  const maxWeeks = Math.min(Math.floor(availableWidth / 2), 26) // 最多 26 周 (半年)
-
-  let content = '{bold}Cost Heatmap{/bold}\n\n'
-
-  // 生成正确的日期网格 - 从今天往前推算
-  const today = new Date()
-  const todayStr = today.toISOString().split('T')[0]!
-
-  // 找到最近的周六作为结束点（或今天）
-  const endDate = new Date(today)
-
-  // 往前推 maxWeeks 周
-  const startDate = new Date(endDate)
-  startDate.setDate(startDate.getDate() - maxWeeks * 7 + 1)
-  // 调整到周日开始
-  startDate.setDate(startDate.getDate() - startDate.getDay())
-
-  // 构建周数组，每周从周日到周六
-  const weeks: string[][] = []
-  const currentDate = new Date(startDate)
-  while (currentDate <= endDate) {
-    const week: string[] = []
-    for (let d = 0; d < 7; d++) {
-      const dateStr = currentDate.toISOString().split('T')[0]!
-      week.push(dateStr)
-      currentDate.setDate(currentDate.getDate() + 1)
-    }
-    weeks.push(week)
-  }
-
-  // 以“当前热力图窗口”的最大值做归一化（避免历史极值导致近期全是浅色）
-  const visibleCosts: number[] = []
-  for (const week of weeks) {
-    for (const date of week) {
-      if (!date || date > todayStr) continue
-      visibleCosts.push(dailySummary[date]?.cost ?? 0)
-    }
-  }
-  const maxCost = Math.max(...visibleCosts, 0) || 1
-
-  // 月份标尺（在列上方标注月份变化）
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-  const colWidth = 2 // 每周一列：字符 + 空格
-  const heatStartCol = 4 // 左侧周几标签宽度
-  const headerLen = heatStartCol + weeks.length * colWidth
-  const monthHeader = Array.from({ length: headerLen }, () => ' ')
-  let lastMonth = -1
-  let lastPlacedAt = -999
+  const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
-  for (let i = 0; i < weeks.length; i++) {
-    const week = weeks[i]!
-    const repDate = week.find(d => d && d <= todayStr) ?? week[0]
-    if (!repDate) continue
-
-    const m = new Date(repDate).getMonth()
-    if (m !== lastMonth) {
-      const label = monthNames[m]!
-      const pos = heatStartCol + i * colWidth
-
-      // 避免月份标签过于拥挤/相互覆盖
-      if (pos - lastPlacedAt >= 4 && pos + label.length <= monthHeader.length) {
-        for (let k = 0; k < label.length; k++) monthHeader[pos + k] = label[k]!
-        lastPlacedAt = pos
-      }
-      lastMonth = m
-    }
+  const stripTags = (s: string): string => s.replace(/\{[^}]+\}/g, '')
+  const visibleLen = (s: string): number => stripTags(s).length
+  const padEndVisible = (s: string, target: number): string => {
+    const pad = Math.max(0, target - visibleLen(s))
+    return s + ' '.repeat(pad)
   }
 
-  content += `{gray-fg}${monthHeader.join('').trimEnd()}{/gray-fg}\n`
+  const wrapGrayNoteLines = (text: string, maxWidth: number): string[] => {
+    const prefix = '{gray-fg}'
+    const suffix = '{/gray-fg}'
+    const full = `备注：${text}`
+    const w = Math.max(10, Math.floor(maxWidth || 10))
+    const lines: string[] = []
 
-  const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    let i = 0
+    while (i < full.length) {
+      const chunk = full.slice(i, i + w)
+      lines.push(prefix + chunk + suffix)
+      i += w
+    }
 
-  for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++) {
-    let row = dayLabels[dayOfWeek]!.padEnd(4)
+    return lines
+  }
+
+  const buildHeatmapLines = (heatWidth: number): string[] => {
+    const safeWidth = Math.max(30, Math.floor(heatWidth || 30))
+
+    // 根据宽度计算热力图周数
+    const availableWidth = safeWidth - 10
+    const maxWeeks = Math.min(Math.floor(availableWidth / 2), 26) // 最多 26 周 (半年)
+
+    // 生成正确的日期网格 - 从今天往前推算
+    const today = new Date()
+    const todayStr = today.toISOString().split('T')[0]!
+
+    // 找到最近的周六作为结束点（或今天）
+    const endDate = new Date(today)
+
+    // 往前推 maxWeeks 周
+    const startDate = new Date(endDate)
+    startDate.setDate(startDate.getDate() - maxWeeks * 7 + 1)
+    // 调整到周一开始（getDay(): 0=Sun, 1=Mon, ..., 6=Sat）
+    const dayOfWeekStart = startDate.getDay()
+    const offsetToMonday = dayOfWeekStart === 0 ? -6 : 1 - dayOfWeekStart
+    startDate.setDate(startDate.getDate() + offsetToMonday)
+
+    // 构建周数组，每周从周一到周日
+    const weeks: string[][] = []
+    const currentDate = new Date(startDate)
+    while (currentDate <= endDate) {
+      const week: string[] = []
+      for (let d = 0; d < 7; d++) {
+        const dateStr = currentDate.toISOString().split('T')[0]!
+        week.push(dateStr)
+        currentDate.setDate(currentDate.getDate() + 1)
+      }
+      weeks.push(week)
+    }
+
+    // 以“当前热力图窗口”的最大值做归一化（避免历史极值导致近期全是浅色）
+    const visibleCosts: number[] = []
     for (const week of weeks) {
-      const date = week[dayOfWeek]
-      if (date && date <= todayStr && dailySummary[date]) {
-        row += getHeatChar(dailySummary[date]!.cost, maxCost) + ' '
-      } else if (date && date <= todayStr) {
-        row += '· ' // 有日期但无数据
-      } else {
-        row += '  ' // 未来日期
+      for (const date of week) {
+        if (!date || date > todayStr) continue
+        visibleCosts.push(dailySummary[date]?.cost ?? 0)
       }
     }
-    content += row + '\n'
+    const maxCost = Math.max(...visibleCosts, 0) || 1
+
+    // 月份标尺（在列上方标注月份变化）
+    const colWidth = 2 // 每周一列：字符 + 空格
+    const heatStartCol = 4 // 左侧周几标签宽度
+    const headerLen = heatStartCol + weeks.length * colWidth
+    const monthHeader = Array.from({ length: headerLen }, () => ' ')
+    let lastMonth = -1
+    let lastPlacedAt = -999
+
+    for (let i = 0; i < weeks.length; i++) {
+      const week = weeks[i]!
+      const repDate = week.find(d => d && d <= todayStr) ?? week[0]
+      if (!repDate) continue
+
+      const m = new Date(repDate).getMonth()
+      if (m !== lastMonth) {
+        const label = monthNames[m]!
+        const pos = heatStartCol + i * colWidth
+
+        // 避免月份标签过于拥挤/相互覆盖
+        if (pos - lastPlacedAt >= 4 && pos + label.length <= monthHeader.length) {
+          for (let k = 0; k < label.length; k++) monthHeader[pos + k] = label[k]!
+          lastPlacedAt = pos
+        }
+        lastMonth = m
+      }
+    }
+
+    const lines: string[] = []
+    lines.push('{bold}Cost Heatmap{/bold}')
+    lines.push('')
+    lines.push(`{gray-fg}${monthHeader.join('').trimEnd()}{/gray-fg}`)
+
+    for (let dayOfWeek = 0; dayOfWeek < 7; dayOfWeek++) {
+      let row = dayLabels[dayOfWeek]!.padEnd(4)
+      for (const week of weeks) {
+        const date = week[dayOfWeek]
+        if (date && date <= todayStr && dailySummary[date]) {
+          row += getHeatChar(dailySummary[date]!.cost, maxCost) + ' '
+        } else if (date && date <= todayStr) {
+          row += '· ' // 有日期但无数据
+        } else {
+          row += '  ' // 未来日期
+        }
+      }
+      lines.push(row.trimEnd())
+    }
+
+    const rangeStart = weeks[0]?.[0] ?? todayStr
+    lines.push(`{gray-fg}Range: ${rangeStart} → ${todayStr}{/gray-fg}`)
+    lines.push('    Less {gray-fg}·░▒▓{/gray-fg}{white-fg}█{/white-fg} More')
+
+    return lines
   }
 
-  const rangeStart = weeks[0]?.[0] ?? todayStr
-  content += `{gray-fg}Range: ${rangeStart} → ${todayStr}{/gray-fg}\n`
-  content += '    Less {gray-fg}·░▒▓{/gray-fg}{white-fg}█{/white-fg} More\n\n'
+  const buildSummaryLines = (summaryWidth: number, compact: boolean): string[] => {
+    const avgDailyCost = activeDays > 0 ? grandTotal.cost / activeDays : 0
+    const w = Math.max(24, Math.floor(summaryWidth || 24))
+    const maxW = Math.min(w, 80)
 
-  // 汇总指标 - 根据宽度决定布局
-  const avgDailyCost = activeDays > 0 ? grandTotal.cost / activeDays : 0
-  const summaryWidth = Math.min(width - 6, 70)
+    const lines: string[] = []
+    lines.push('{bold}Summary{/bold}')
+    if (!compact) lines.push('─'.repeat(Math.min(Math.max(10, maxW - 2), 70)))
 
-  content += '{bold}Summary{/bold}\n'
-  content += '─'.repeat(summaryWidth) + '\n'
+    const twoCol = maxW >= 46
 
-  if (width >= 80) {
-    // 双列布局
-    content += `{green-fg}~Total cost:{/green-fg}      ${formatCost(grandTotal.cost).padStart(12)}    `
-    content += `{green-fg}Active days:{/green-fg}      ${String(activeDays).padStart(8)}\n`
-    content += `{green-fg}Total tokens:{/green-fg}     ${formatTokens(grandTotal.tokens).padStart(12)}    `
-    content += `{green-fg}Total requests:{/green-fg}   ${formatNumber(grandTotal.requests).padStart(8)}\n`
-    content += `{green-fg}Cache hit rate:{/green-fg}   ${formatPercent(cacheHitRate).padStart(12)}    `
-    content += `{green-fg}Avg daily cost:{/green-fg}   ${formatCost(avgDailyCost).padStart(8)}\n\n`
-  } else {
-    // 单列布局
-    content += `{green-fg}~Total cost:{/green-fg}      ${formatCost(grandTotal.cost)}\n`
-    content += `{green-fg}Total tokens:{/green-fg}     ${formatTokens(grandTotal.tokens)}\n`
-    content += `{green-fg}Total requests:{/green-fg}   ${formatNumber(grandTotal.requests)}\n`
-    content += `{green-fg}Active days:{/green-fg}      ${activeDays}\n`
-    content += `{green-fg}Cache hit rate:{/green-fg}   ${formatPercent(cacheHitRate)}\n`
-    content += `{green-fg}Avg daily cost:{/green-fg}   ${formatCost(avgDailyCost)}\n\n`
+    if (twoCol) {
+      const leftLabelW = 18
+      const rightLabelW = 18
+      const leftValW = 12
+      const rightValW = 8
+      const leftPartW = leftLabelW + leftValW + 4
+
+      lines.push(
+        padEndVisible(
+          padEndVisible('{green-fg}~Total cost:{/green-fg}', leftLabelW) + formatCost(grandTotal.cost).padStart(leftValW),
+          leftPartW,
+        ) +
+          padEndVisible(' {green-fg}Active days:{/green-fg}', rightLabelW) +
+          String(activeDays).padStart(rightValW),
+      )
+
+      lines.push(
+        padEndVisible(
+          padEndVisible('{green-fg}Total tokens:{/green-fg}', leftLabelW) +
+            formatTokens(grandTotal.tokens).padStart(leftValW),
+          leftPartW,
+        ) +
+          padEndVisible(' {green-fg}Total requests:{/green-fg}', rightLabelW) +
+          formatNumber(grandTotal.requests).padStart(rightValW),
+      )
+
+      lines.push(
+        padEndVisible(
+          padEndVisible('{green-fg}Cache hit rate:{/green-fg}', leftLabelW) +
+            formatPercent(cacheHitRate).padStart(leftValW),
+          leftPartW,
+        ) +
+          padEndVisible(' {green-fg}Avg daily cost:{/green-fg}', rightLabelW) +
+          formatCost(avgDailyCost).padStart(rightValW),
+      )
+    } else {
+      lines.push(`{green-fg}~Total cost:{/green-fg}      ${formatCost(grandTotal.cost)}`)
+      lines.push(`{green-fg}Total tokens:{/green-fg}     ${formatTokens(grandTotal.tokens)}`)
+      lines.push(`{green-fg}Total requests:{/green-fg}   ${formatNumber(grandTotal.requests)}`)
+      lines.push(`{green-fg}Active days:{/green-fg}      ${activeDays}`)
+      lines.push(`{green-fg}Cache hit rate:{/green-fg}   ${formatPercent(cacheHitRate)}`)
+      lines.push(`{green-fg}Avg daily cost:{/green-fg}   ${formatCost(avgDailyCost)}`)
+    }
+
+    if (!compact) lines.push('')
+
+    if (topModel) {
+      const label = '{cyan-fg}Top model:{/cyan-fg} '
+      const tail = `(${formatCost(topModel.cost)})`
+      const maxIdLen = Math.max(4, maxW - visibleLen(label) - visibleLen(tail) - 2)
+      lines.push(label + truncate(topModel.id, maxIdLen) + ' ' + tail)
+    }
+
+    if (topProject) {
+      const label = '{cyan-fg}Top project:{/cyan-fg} '
+      const shortName = resolveProjectName(topProject.name, data.workspaceMappings)
+      const tail = `(${formatCost(topProject.cost)})`
+      const maxNameLen = Math.max(4, maxW - visibleLen(label) - visibleLen(tail) - 2)
+      lines.push(label + truncate(shortName, maxNameLen) + ' ' + tail)
+    }
+
+    return lines
   }
 
-  if (topModel) {
-    content += `{cyan-fg}Top model:{/cyan-fg}        ${topModel.id} (${formatCost(topModel.cost)})\n`
-  }
-  if (topProject) {
-    const projectMaxLen = width >= 100 ? 60 : 35
-    const shortName = resolveProjectName(topProject.name, data.workspaceMappings)
-    content += `{cyan-fg}Top project:{/cyan-fg}      ${truncate(shortName, projectMaxLen)} (${formatCost(topProject.cost)})\n`
+  const noteLines = note ? wrapGrayNoteLines(note, Math.max(20, width - 6)) : []
+
+  // 尝试默认：热力图在上，Summary 在下
+  const verticalHeat = buildHeatmapLines(width)
+  const verticalSummary = buildSummaryLines(width, false)
+  const verticalLines: string[] = [...verticalHeat, '', ...verticalSummary]
+  if (noteLines.length) verticalLines.push('', ...noteLines)
+
+  if (verticalLines.length <= height) {
+    box.setContent(verticalLines.join('\n'))
+    return
   }
 
-  if (note) {
-    content += `\n{gray-fg}备注：${note}{/gray-fg}\n`
+  // 终端偏矮：尝试把 Summary 放到右侧（需要足够宽度）
+  const gap = 6
+  const minSummaryWidth = 34
+  const leftWidthBudget = Math.max(30, width - minSummaryWidth - gap)
+  const leftHeat = buildHeatmapLines(leftWidthBudget)
+  const leftVisibleWidth = Math.max(...leftHeat.map(l => visibleLen(l)), 0)
+  const rightWidth = Math.max(0, width - leftVisibleWidth - gap)
+
+  if (rightWidth >= minSummaryWidth) {
+    const rightSummary = buildSummaryLines(rightWidth, true)
+    const rowCount = Math.max(leftHeat.length, rightSummary.length)
+    const sideLines: string[] = []
+
+    for (let i = 0; i < rowCount; i++) {
+      const l = leftHeat[i] ?? ''
+      const r = rightSummary[i] ?? ''
+      sideLines.push(padEndVisible(l, leftVisibleWidth) + ' '.repeat(gap) + r)
+    }
+
+    if (noteLines.length) sideLines.push('', ...noteLines)
+
+    if (sideLines.length <= height) {
+      box.setContent(sideLines.join('\n'))
+      return
+    }
   }
 
-  box.setContent(content)
+  // fallback：仍然输出纵向布局（可滚动）
+  box.setContent(verticalLines.join('\n'))
 }
 
 // 渲染 By Model 视图
-function renderByModel(box: any, data: AnalysisData, width: number, note: string): void {
+function renderByModel(
+  box: any,
+  data: AnalysisData,
+  scrollOffset = 0,
+  width: number,
+  note: string,
+  pageSize: number,
+): void {
   const { modelTotals, grandTotal } = data
   const sorted = Object.entries(modelTotals).sort((a, b) => b[1].cost - a[1].cost)
 
@@ -219,7 +337,10 @@ function renderByModel(box: any, data: AnalysisData, width: number, note: string
     'Avg/Req'.padStart(10) +
     '{/underline}\n'
 
-  for (const [modelId, stats] of sorted) {
+  const safePageSize = Math.max(1, Math.floor(pageSize || 1))
+  const visibleModels = sorted.slice(scrollOffset, scrollOffset + safePageSize)
+
+  for (const [modelId, stats] of visibleModels) {
     const avgPerReq = stats.requests > 0 ? stats.cost / stats.requests : 0
     content +=
       truncate(modelId, modelCol - 1).padEnd(modelCol) +
@@ -239,15 +360,26 @@ function renderByModel(box: any, data: AnalysisData, width: number, note: string
     formatTokens(grandTotal.tokens).padStart(12) +
     '{/bold}\n'
 
+  if (sorted.length > safePageSize) {
+    content += `\n{gray-fg}Showing ${scrollOffset + 1}-${Math.min(scrollOffset + safePageSize, sorted.length)} of ${sorted.length} models (↑↓ to scroll){/gray-fg}`
+  }
+
   if (note) {
-    content += `\n{gray-fg}备注：${note}{/gray-fg}\n`
+    content += `\n\n{gray-fg}备注：${note}{/gray-fg}\n`
   }
 
   box.setContent(content)
 }
 
 // 渲染 By Project 视图
-function renderByProject(box: any, data: AnalysisData, width: number, note: string): void {
+function renderByProject(
+  box: any,
+  data: AnalysisData,
+  scrollOffset = 0,
+  width: number,
+  note: string,
+  pageSize: number,
+): void {
   const { projectTotals, grandTotal } = data
   const sorted = Object.entries(projectTotals).sort((a, b) => b[1].cost - a[1].cost)
 
@@ -266,7 +398,10 @@ function renderByProject(box: any, data: AnalysisData, width: number, note: stri
     'Tokens'.padStart(12) +
     '{/underline}\n'
 
-  for (const [projectName, stats] of sorted) {
+  const safePageSize = Math.max(1, Math.floor(pageSize || 1))
+  const visibleProjects = sorted.slice(scrollOffset, scrollOffset + safePageSize)
+
+  for (const [projectName, stats] of visibleProjects) {
     // 简化项目名
     const shortName = resolveProjectName(projectName, data.workspaceMappings)
     content +=
@@ -286,8 +421,12 @@ function renderByProject(box: any, data: AnalysisData, width: number, note: stri
     formatTokens(grandTotal.tokens).padStart(12) +
     '{/bold}\n'
 
+  if (sorted.length > safePageSize) {
+    content += `\n{gray-fg}Showing ${scrollOffset + 1}-${Math.min(scrollOffset + safePageSize, sorted.length)} of ${sorted.length} projects (↑↓ to scroll){/gray-fg}`
+  }
+
   if (note) {
-    content += `\n{gray-fg}备注：${note}{/gray-fg}\n`
+    content += `\n\n{gray-fg}备注：${note}{/gray-fg}\n`
   }
 
   box.setContent(content)
@@ -440,7 +579,13 @@ async function main(): Promise<void> {
   // Tab 状态
   const tabs = ['Overview', 'By Model', 'By Project', 'Daily']
   let currentTab = 0
+
+  let modelScrollOffset = 0
+  let projectScrollOffset = 0
   let dailyScrollOffset = 0
+
+  let modelPageSize = 10
+  let projectPageSize = 10
   let dailyPageSize = 20
 
   // Tab 栏
@@ -530,37 +675,46 @@ async function main(): Promise<void> {
         ? `针对 CodeBuddy Code < 2.20.0 版本产生的数据，由于没有请求级别的 model ID，用量是基于当前 CodeBuddy Code 设置的 model ID（${data.defaultModelId}）计算价格的`
         : 'IDE 的 usage 不包含缓存命中/写入 tokens，无法计算缓存相关价格与命中率；成本按 input/output tokens 估算'
 
-    // Daily 视图：根据当前可用高度动态调整每页行数，避免 resize 后内容溢出
-    {
-      const screenHeight = Number(screen.height) || 24
-      const contentBoxHeight = Math.max(1, screenHeight - 5) // 对应 contentBox: height = '100%-5'
-      const paddingTop = Number((contentBox as any).padding?.top ?? 0)
-      const paddingBottom = Number((contentBox as any).padding?.bottom ?? 0)
-      const innerHeight = Math.max(1, contentBoxHeight - paddingTop - paddingBottom)
+    const screenHeight = Number(screen.height) || 24
+    const contentBoxHeight = Math.max(1, screenHeight - 5) // 对应 contentBox: height = '100%-5'
+    const paddingTop = Number((contentBox as any).padding?.top ?? 0)
+    const paddingBottom = Number((contentBox as any).padding?.bottom ?? 0)
+    const innerHeight = Math.max(1, contentBoxHeight - paddingTop - paddingBottom)
 
-      const baseLines = 3 // title + blank + header
-      const footerLines = 2 // blank + hint line（最坏情况）
-      const availableTextWidth = Math.max(20, width - 8)
-      const estimatedNoteLines = note
-        ? Math.max(1, Math.ceil(`备注：${note}`.length / availableTextWidth))
-        : 0
-      const noteLines = note ? 2 + estimatedNoteLines : 0 // 两行空行 + 备注文本
-      const reservedLines = baseLines + footerLines + noteLines + 1 // safety
+    // 根据当前可用高度动态调整每页行数（By Model / By Project / Daily），避免 resize 后内容溢出
+    const baseLines = 3 // title + blank + header
+    const hintLines = 2 // blank + hint line（最坏情况）
+    const availableTextWidth = Math.max(20, width - 8)
+    const estimatedNoteLines = note ? Math.max(1, Math.ceil(`备注：${note}`.length / availableTextWidth)) : 0
+    const noteLines = note ? 2 + estimatedNoteLines : 0 // 两行空行 + 备注文本
 
-      dailyPageSize = Math.max(1, innerHeight - reservedLines)
-      const maxOffset = Math.max(0, Object.keys(data.dailySummary).length - dailyPageSize)
-      dailyScrollOffset = Math.min(dailyScrollOffset, maxOffset)
-    }
+    // By Model / By Project：表格尾部还有 total 两行
+    const listReservedLines = baseLines + 2 + hintLines + noteLines + 1 // separator + total + safety
+    modelPageSize = Math.max(1, innerHeight - listReservedLines)
+    projectPageSize = Math.max(1, innerHeight - listReservedLines)
+
+    // Daily：无 total 行
+    const dailyReservedLines = baseLines + hintLines + noteLines + 1 // safety
+    dailyPageSize = Math.max(1, innerHeight - dailyReservedLines)
+
+    const modelMaxOffset = Math.max(0, Object.keys(data.modelTotals).length - modelPageSize)
+    modelScrollOffset = Math.min(modelScrollOffset, modelMaxOffset)
+
+    const projectMaxOffset = Math.max(0, Object.keys(data.projectTotals).length - projectPageSize)
+    projectScrollOffset = Math.min(projectScrollOffset, projectMaxOffset)
+
+    const dailyMaxOffset = Math.max(0, Object.keys(data.dailySummary).length - dailyPageSize)
+    dailyScrollOffset = Math.min(dailyScrollOffset, dailyMaxOffset)
 
     switch (currentTab) {
       case 0:
-        renderOverview(contentBox, data, width, note)
+        renderOverview(contentBox, data, width, innerHeight, note)
         break
       case 1:
-        renderByModel(contentBox, data, width, note)
+        renderByModel(contentBox, data, modelScrollOffset, width, note, modelPageSize)
         break
       case 2:
-        renderByProject(contentBox, data, width, note)
+        renderByProject(contentBox, data, projectScrollOffset, width, note, projectPageSize)
         break
       case 3:
         renderDaily(contentBox, data, dailyScrollOffset, width, note, dailyPageSize)
@@ -602,7 +756,10 @@ async function main(): Promise<void> {
   // 键盘事件
   screen.key(['tab'], () => {
     currentTab = (currentTab + 1) % tabs.length
+    modelScrollOffset = 0
+    projectScrollOffset = 0
     dailyScrollOffset = 0
+    contentBox.scrollTo(0)
     updateTabBar()
     updateContent()
     screen.render()
@@ -610,27 +767,64 @@ async function main(): Promise<void> {
 
   screen.key(['S-tab'], () => {
     currentTab = (currentTab - 1 + tabs.length) % tabs.length
+    modelScrollOffset = 0
+    projectScrollOffset = 0
     dailyScrollOffset = 0
+    contentBox.scrollTo(0)
     updateTabBar()
     updateContent()
     screen.render()
   })
 
   screen.key(['up', 'k'], () => {
+    if (currentTab === 1) {
+      modelScrollOffset = Math.max(0, modelScrollOffset - 1)
+      updateContent()
+      screen.render()
+      return
+    }
+    if (currentTab === 2) {
+      projectScrollOffset = Math.max(0, projectScrollOffset - 1)
+      updateContent()
+      screen.render()
+      return
+    }
     if (currentTab === 3) {
       dailyScrollOffset = Math.max(0, dailyScrollOffset - 1)
       updateContent()
       screen.render()
+      return
     }
+
+    contentBox.scroll(-1)
+    screen.render()
   })
 
   screen.key(['down', 'j'], () => {
+    if (currentTab === 1) {
+      const maxOffset = Math.max(0, Object.keys(data.modelTotals).length - modelPageSize)
+      modelScrollOffset = Math.min(maxOffset, modelScrollOffset + 1)
+      updateContent()
+      screen.render()
+      return
+    }
+    if (currentTab === 2) {
+      const maxOffset = Math.max(0, Object.keys(data.projectTotals).length - projectPageSize)
+      projectScrollOffset = Math.min(maxOffset, projectScrollOffset + 1)
+      updateContent()
+      screen.render()
+      return
+    }
     if (currentTab === 3) {
       const maxOffset = Math.max(0, Object.keys(data.dailySummary).length - dailyPageSize)
       dailyScrollOffset = Math.min(maxOffset, dailyScrollOffset + 1)
       updateContent()
       screen.render()
+      return
     }
+
+    contentBox.scroll(1)
+    screen.render()
   })
 
   screen.key(['q', 'C-c'], () => {
@@ -643,7 +837,10 @@ async function main(): Promise<void> {
     screen.render()
     try {
       data = await loadUsageData({ days: options.days, source: currentSource })
+      modelScrollOffset = 0
+      projectScrollOffset = 0
       dailyScrollOffset = 0
+      contentBox.scrollTo(0)
       updateTabBar()
       updateContent()
       updateStatusBar()
@@ -659,7 +856,10 @@ async function main(): Promise<void> {
     try {
       currentSource = currentSource === 'code' ? 'ide' : 'code'
       data = await loadUsageData({ days: options.days, source: currentSource })
+      modelScrollOffset = 0
+      projectScrollOffset = 0
       dailyScrollOffset = 0
+      contentBox.scrollTo(0)
       updateTabBar()
       updateContent()
       updateStatusBar()
