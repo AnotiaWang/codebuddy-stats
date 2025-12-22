@@ -1002,13 +1002,19 @@ async function main(): Promise<void> {
     statusBar.setContent(' {yellow-fg}Reloading...{/yellow-fg}')
     screen.render()
     try {
+      const prevDetailDate = dailyDetailDate
       data = await loadUsageData({ days: options.days, source: currentSource })
       modelScrollOffset = 0
       projectScrollOffset = 0
       dailyScrollOffset = 0
       dailySelectedIndex = 0
-      dailyDetailDate = null
       dailyDetailScrollOffset = 0
+      // 如果之前在详情视图且该日期仍存在，保持在详情视图
+      if (prevDetailDate && data.dailySummary[prevDetailDate]) {
+        dailyDetailDate = prevDetailDate
+      } else {
+        dailyDetailDate = null
+      }
       contentBox.scrollTo(0)
       updateTabBar()
       updateContent()
