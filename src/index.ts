@@ -525,7 +525,7 @@ function renderDaily(
   box.setContent(content)
 }
 
-// 渲染 Daily Detail 视图（某一天的详细数据）
+// 渲染 Daily Detail 视图（某一天的详细数据，按 project 分组显示所有 model 用量）
 function renderDailyDetail(
   box: any,
   data: AnalysisData,
@@ -543,66 +543,120 @@ function renderDailyDetail(
     return
   }
 
-  // 汇总当天所有模型的用量
-  const modelStats: Record<string, { cost: number; tokens: number; requests: number }> = {}
-  for (const [, models] of Object.entries(dayData)) {
-    for (const [model, stats] of Object.entries(models)) {
-      const s = stats as any
-      if (!modelStats[model]) {
-        modelStats[model] = { cost: 0, tokens: 0, requests: 0 }
-      }
-      modelStats[model].cost += Number(s.cost ?? 0)
-      modelStats[model].tokens += Number(s.totalTokens ?? 0)
-      modelStats[model].requests += Number(s.requests ?? 0)
-    }
+  // 按 project 分组，每个 project 下按 cost 排序 models
+  type ProjectDetail = {
+    name: string
+    shortName: string
+    totalCost: number
+    totalTokens: number
+    totalRequests: number
+    models: Array<{ id: string; cost: number; tokens: number; requests: number }>
   }
 
-  const sortedModels = Object.entries(modelStats).sort((a, b) => b[1].cost - a[1].cost)
+  const projectDetails: ProjectDetail[] = []
+
+  for (const [projectName, models] of Object.entries(dayData)) {
+    const shortName = resolveProjectName(projectName, data.workspaceMappings)
+    const modelList: ProjectDetail['models'] = []
+    let totalCost = 0
+    let totalTokens = 0
+    let totalRequests = 0
+
+    for (const [modelId, stats] of Object.entries(models)) {
+      const s = stats as any
+      const cost = Number(s.cost ?? 0)
+      const tokens = Number(s.totalTokens ?? 0)
+      const requests = Number(s.requests ?? 0)
+      modelList.push({ id: modelId, cost, tokens, requests })
+      totalCost += cost
+      totalTokens += tokens
+      totalRequests += requests
+    }
+
+    // 按 cost 降序排序 models
+    modelList.sort((a, b) => b.cost - a.cost)
+
+    projectDetails.push({
+      name: projectName,
+      shortName,
+      totalCost,
+      totalTokens,
+      totalRequests,
+      models: modelList,
+    })
+  }
+
+  // 按 project 总 cost 降序排序
+  projectDetails.sort((a, b) => b.totalCost - a.totalCost)
+
+  // 构建显示行（每行可以是 project 标题或 model 明细）
+  type DisplayLine = { type: 'project'; project: ProjectDetail } | { type: 'model'; model: ProjectDetail['models'][0] }
+  const displayLines: DisplayLine[] = []
+
+  for (const project of projectDetails) {
+    displayLines.push({ type: 'project', project })
+    for (const model of project.models) {
+      displayLines.push({ type: 'model', model })
+    }
+  }
 
   // 根据宽度计算列宽
   const availableWidth = width - 6 // padding
   const fixedCols = 12 + 12 + 12 // Cost + Requests + Tokens
-  const modelCol = Math.max(25, availableWidth - fixedCols)
-  const totalWidth = modelCol + fixedCols
+  const nameCol = Math.max(25, availableWidth - fixedCols)
+  const totalWidth = nameCol + fixedCols
 
-  let content = `{bold}${date} - Model Usage Details{/bold}\n\n`
+  let content = `{bold}${date} - Project & Model Usage Details{/bold}\n\n`
 
   // 当天汇总
   content += `{green-fg}Total cost:{/green-fg}     ${formatCost(daySummary.cost)}    `
   content += `{green-fg}Tokens:{/green-fg} ${formatTokens(daySummary.tokens)}    `
-  content += `{green-fg}Requests:{/green-fg} ${formatNumber(daySummary.requests)}\n\n`
+  content += `{green-fg}Requests:{/green-fg} ${formatNumber(daySummary.requests)}    `
+  content += `{green-fg}Projects:{/green-fg} ${projectDetails.length}\n\n`
 
   content +=
     '{underline}' +
-    'Model'.padEnd(modelCol) +
+    'Project / Model'.padEnd(nameCol) +
     '~Cost'.padStart(12) +
     'Requests'.padStart(12) +
     'Tokens'.padStart(12) +
     '{/underline}\n'
 
   const safePageSize = Math.max(1, Math.floor(pageSize || 1))
-  const visibleModels = sortedModels.slice(scrollOffset, scrollOffset + safePageSize)
+  const visibleLines = displayLines.slice(scrollOffset, scrollOffset + safePageSize)
 
-  for (const [modelId, stats] of visibleModels) {
-    content +=
-      truncate(modelId, modelCol - 1).padEnd(modelCol) +
-      formatCost(stats.cost).padStart(12) +
-      formatNumber(stats.requests).padStart(12) +
-      formatTokens(stats.tokens).padStart(12) +
-      '\n'
+  for (const line of visibleLines) {
+    if (line.type === 'project') {
+      const p = line.project
+      content +=
+        '{cyan-fg}' +
+        truncate(p.shortName, nameCol - 1).padEnd(nameCol) +
+        formatCost(p.totalCost).padStart(12) +
+        formatNumber(p.totalRequests).padStart(12) +
+        formatTokens(p.totalTokens).padStart(12) +
+        '{/cyan-fg}\n'
+    } else {
+      const m = line.model
+      content +=
+        ('  ' + truncate(m.id, nameCol - 3)).padEnd(nameCol) +
+        formatCost(m.cost).padStart(12) +
+        formatNumber(m.requests).padStart(12) +
+        formatTokens(m.tokens).padStart(12) +
+        '\n'
+    }
   }
 
   content += '─'.repeat(totalWidth) + '\n'
   content +=
     '{bold}' +
-    `Total (${sortedModels.length} models)`.padEnd(modelCol) +
+    `Total (${projectDetails.length} projects)`.padEnd(nameCol) +
     formatCost(daySummary.cost).padStart(12) +
     formatNumber(daySummary.requests).padStart(12) +
     formatTokens(daySummary.tokens).padStart(12) +
     '{/bold}\n'
 
-  if (sortedModels.length > safePageSize) {
-    content += `\n{gray-fg}Showing ${scrollOffset + 1}-${Math.min(scrollOffset + safePageSize, sortedModels.length)} of ${sortedModels.length} models (↑↓ scroll, Esc back){/gray-fg}`
+  if (displayLines.length > safePageSize) {
+    content += `\n{gray-fg}Showing ${scrollOffset + 1}-${Math.min(scrollOffset + safePageSize, displayLines.length)} of ${displayLines.length} rows (↑↓ scroll, Esc back){/gray-fg}`
   } else {
     content += `\n{gray-fg}(Esc back to Daily list){/gray-fg}`
   }
@@ -941,13 +995,14 @@ async function main(): Promise<void> {
     }
     if (currentTab === 3) {
       if (dailyDetailDate) {
-        // 在 detail 视图中滚动（需要计算当天的模型数量）
+        // 在 detail 视图中滚动（计算总行数：project 数 + 每个 project 下的 model 数）
         const dayData = data.dailyData[dailyDetailDate]
         if (dayData) {
-          const modelCount = new Set(
-            Object.values(dayData).flatMap(models => Object.keys(models)),
-          ).size
-          const maxOffset = Math.max(0, modelCount - dailyDetailPageSize)
+          let totalLines = 0
+          for (const models of Object.values(dayData)) {
+            totalLines += 1 + Object.keys(models).length // 1 for project header + model count
+          }
+          const maxOffset = Math.max(0, totalLines - dailyDetailPageSize)
           dailyDetailScrollOffset = Math.min(maxOffset, dailyDetailScrollOffset + 1)
         }
       } else {
