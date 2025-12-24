@@ -6,7 +6,7 @@
 
 ## 功能特性
 
-- **双数据源支持** - 同时支持 CodeBuddy Code 和 CodeBuddy IDE（VS Code 扩展）
+- **双数据源支持** - 同时支持 CodeBuddy Code 和 CodeBuddy IDE
 - **成本热力图** - 可视化每日 AI 使用成本分布
 - **模型统计** - 按模型分类的费用、请求数、Token 用量
 - **项目统计** - 按项目分类的费用汇总
@@ -104,7 +104,7 @@ _价格单位：USD / 1M tokens，部分模型支持分层定价_
 
 特点：包含完整的缓存命中/写入 token 数据，可计算缓存命中率和精确成本。
 
-### CodeBuddy IDE（VS Code 扩展）
+### CodeBuddy IDE
 
 - **macOS**: `~/Library/Application Support/CodeBuddyExtension/Data/`
 - **Windows**: `%APPDATA%/CodeBuddyExtension/Data/`
